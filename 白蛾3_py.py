@@ -11,27 +11,19 @@ import streamlit as st
 import random
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
+import pandas as pd
 
 # 設定網頁標題
-st.set_page_config(page_title="胡椒蛾演化模擬器", layout="centered")
-st.title("🦋 胡椒蛾工業黑化模擬")
+st.set_page_config(page_title="胡椒蛾演化模擬", layout="wide") # 使用寬版佈局
+st.title("🦋 胡椒蛾演化模擬器")
 
-# 1. 初始化數值 (儲存在 session_state 確保重新整理時資料不消失)
+# 1. 初始化數值
 if 'white' not in st.session_state:
     st.session_state.white = 8
     st.session_state.black = 2
+    st.session_state.history = pd.DataFrame({'Step': [0], 'White': [8], 'Black': [2]})
 
-# 2. 側邊欄控制與統計
-with st.sidebar:
-    st.header("數據統計")
-    st.metric("白蛾數量", st.session_state.white)
-    st.metric("黑蛾數量", st.session_state.black)
-    if st.button("重設模擬"):
-        st.session_state.white = 8
-        st.session_state.black = 2
-        st.rerun()
-
-# 3. 點擊邏輯函式
+# 2. 邏輯函式
 def emit_smoke():
     if st.session_state.white > 1:
         change = random.randint(1, 2)
@@ -39,32 +31,62 @@ def emit_smoke():
             change = st.session_state.white - 1
         st.session_state.white -= change
         st.session_state.black += change
-    else:
-        st.warning("演化已達平衡，白蛾剩餘 1 隻。")
+        
+        # 紀錄歷史
+        new_data = pd.DataFrame({
+            'Step': [len(st.session_state.history)],
+            'White': [st.session_state.white],
+            'Black': [st.session_state.black]
+        })
+        st.session_state.history = pd.concat([st.session_state.history, new_data], ignore_index=True)
 
-# 4. 繪製模擬畫面
-fig, ax = plt.subplots(figsize=(10, 6))
-img_factory = mpimg.imread('工廠圖片.jpg')
-img_white = mpimg.imread('白蛾.jpg')
-img_black = mpimg.imread('黑蛾.jpg')
+# 3. 版面配置：左邊是大圖，右邊是小數據
+col_main, col_side = st.columns([2.5, 1]) # 比例設為 2.5 : 1，讓主圖變大
 
-ax.imshow(img_factory, extent=[0, 100, 0, 70], aspect='auto', alpha=0.6)
-ax.set_axis_off()
+with col_main:
+    st.write("### 🏭 生態觀察窗 (點擊下方按鈕觸發)")
+    fig_sim, ax_sim = plt.subplots(figsize=(10, 6.5)) # 增大主圖比例
+    ax_sim.set_xlim(0, 100)
+    ax_sim.set_ylim(0, 70)
+    ax_sim.set_axis_off()
+    
+    try:
+        img_f = mpimg.imread('工廠圖片.jpg')
+        img_w = mpimg.imread('白蛾.jpg')
+        img_b = mpimg.imread('黑蛾.jpg')
+        ax_sim.imshow(img_f, extent=[0, 100, 0, 70], aspect='auto', alpha=0.6)
+        
+        for _ in range(st.session_state.white):
+            rx, ry = random.randint(5, 85), random.randint(5, 55)
+            ax_sim.imshow(img_w, extent=[rx, rx+12, ry, ry+9], zorder=3)
+        for _ in range(st.session_state.black):
+            rx, ry = random.randint(5, 85), random.randint(5, 55)
+            ax_sim.imshow(img_b, extent=[rx, rx+12, ry, ry+9], zorder=3)
+        st.pyplot(fig_sim)
+    except:
+        st.error("載入圖片時出錯。")
 
-# 隨機放置蛾群
-for _ in range(st.session_state.white):
-    rx, ry = random.randint(5, 85), random.randint(5, 55)
-    ax.imshow(img_white, extent=[rx, rx+12, ry, ry+9])
-for _ in range(st.session_state.black):
-    rx, ry = random.randint(5, 85), random.randint(5, 55)
-    ax.imshow(img_black, extent=[rx, rx+12, ry, ry+9])
+with col_side:
+    st.write("### 📈 數據趨勢")
+    # 縮小折線圖的尺寸
+    fig_chart, ax_chart = plt.subplots(figsize=(4, 4)) 
+    ax_chart.plot(st.session_state.history['Step'], st.session_state.history['White'], 
+                  marker='o', markersize=4, label='White', color='#cccccc')
+    ax_chart.plot(st.session_state.history['Step'], st.session_state.history['Black'], 
+                  marker='o', markersize=4, label='Black', color='#333333')
+    ax_chart.set_title("Population Change", fontsize=10)
+    ax_chart.tick_params(labelsize=8)
+    ax_chart.legend(prop={'size': 8})
+    st.pyplot(fig_chart)
+    
+    # 放置按鈕在側邊欄下方，更符合操作邏輯
+    if st.button("🏭 排放黑煙", use_container_width=True):
+        emit_smoke()
+        st.rerun()
+    
+    if st.button("🔄 重置模擬", use_container_width=True):
+        st.session_state.white, st.session_state.black = 8, 2
+        st.session_state.history = pd.DataFrame({'Step': [0], 'White': [8], 'Black': [2]})
+        st.rerun()
 
-# 顯示圖片
-st.pyplot(fig)
-
-# 5. 人性化互動：大按鈕
-if st.button("🏭 點擊工廠排放黑煙", use_container_width=True):
-    emit_smoke()
-    st.rerun()
-
-st.info("這是一個模擬 19 世紀英國工業革命時期，環境汙染如何透過天擇改變蛾群顏色的教學工具。")
+st.caption("這是一個模擬天擇過程的互動工具。隨著環境變黑，白蛾的存活率下降。")
